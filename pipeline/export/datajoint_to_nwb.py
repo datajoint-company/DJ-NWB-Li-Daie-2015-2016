@@ -127,7 +127,7 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
                              posx=unit['unit_posx'],
                              posy=unit['unit_posy'],
                              amp=unit['unit_amp'] if unit['unit_amp'] else np.nan,
-                             snr=unit['unit_snr'] if unit['unit_amp'] else np.nan,
+                             snr=unit['unit_snr'] if unit['unit_snr'] else np.nan,
                              cell_type=unit['cell_type'],
                              spike_times=unit['spike_times'],
                              waveform_mean=np.mean(unit['waveform'], axis=0),
