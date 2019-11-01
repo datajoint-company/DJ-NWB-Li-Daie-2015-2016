@@ -120,7 +120,7 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
         for unit in (ephys.Unit * ephys.UnitCellType & probe_insertion).fetch(as_dict=True):
             # make an electrode table region (which electrode(s) is this unit coming from)
             nwbfile.add_unit(id=unit['unit'],
-                             electrodes=[unit['electrode']-1],
+                             electrodes=[unit['electrode']-1],  # units.electrodes expects 0-indexed array
                              electrode_group=electrode_groups[unit['electrode_group']],
                              sampling_rate=ecephys_fs,
                              quality=unit['unit_quality'],
