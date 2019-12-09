@@ -40,6 +40,8 @@ def main(data_dir='./data/data_structure'):
     task_protocol = {'task': 'audio delay', 'task_protocol': 1}
 
     clustering_method = 'manual'
+
+    project_name = 'li2015'
     
     insert_kwargs = {'ignore_extra_fields': True, 'allow_direct_insert': True, 'skip_duplicates': True}
 
@@ -53,7 +55,8 @@ def main(data_dir='./data/data_structure'):
         subject_id = int(re.search('ANM\d+', fname).group().replace('ANM', ''))
         session_date = parse_date(re.search('_\d+', fname).group().replace('_', ''))
 
-        sessions = (experiment.Session & {'subject_id': subject_id, 'session_date': session_date})
+        sessions = (experiment.Session & (experiment.ProjectSession & {'project_name': project_name})
+                    & {'subject_id': subject_id, 'session_date': session_date})
         if len(sessions) < 2:
             session_key = sessions.fetch1('KEY')
         else:
@@ -88,7 +91,7 @@ def main(data_dir='./data/data_structure'):
         laser_power = sess_data.timeSeriesArrayHash.value.valueMatrix[:, 2]
 
         # ---- trial data ----
-        photostims = (experiment.Photostim * experiment.BrainLocation & session_key)
+        photostims = (experiment.Photostim * experiment.PhotostimBrainRegion & session_key)
 
         trial_zip = zip(sess_data.trialIds, sess_data.trialStartTimes * trial_time_conversion,
                         sess_data.trialTypeMat[:6, :].T, sess_data.trialTypeMat[6, :].T,
@@ -133,7 +136,7 @@ def main(data_dir='./data/data_structure'):
                 pkey = dict(tkey)
                 photostim_trials.append(pkey)
                 if photostim_type in (1, 2):
-                    photostim_key = (photostims & {'brain_area': photostim_mapper[photostim_type.astype(int)]})
+                    photostim_key = (photostims & {'stim_brain_area': photostim_mapper[photostim_type.astype(int)]})
                     if photostim_key:
                         photostim_key = photostim_key.fetch1('KEY')
                         stim_power = laser_power[ts_trial == tr_id]
@@ -158,7 +161,7 @@ def main(data_dir='./data/data_structure'):
         # ---- units ----
         insert_key = (ephys.ProbeInsertion & session_key).fetch1()
         ap, dv = (ephys.ProbeInsertion.InsertionLocation & session_key).fetch1('ap_location', 'dv_location')
-        e_sites = {e: (y - ap, z - dv) for e, y, z in
+        e_sites = {e: (y - float(ap), z - float(dv)) for e, y, z in
                    zip(*(ephys.ProbeInsertion.ElectrodeSitePosition & session_key).fetch(
                        'electrode', 'electrode_posy', 'electrode_posz'))}
         tr_events = {tr: (float(stime), float(gotime)) for tr, stime, gotime in

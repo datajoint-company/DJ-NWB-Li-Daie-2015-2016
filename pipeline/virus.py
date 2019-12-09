@@ -28,8 +28,19 @@ class VirusInjection(dj.Manual):
     -> Virus
     injection_date: date   
     injection_volume: float # in nL
-    -> experiment.BrainLocation
-    ml_location=null: float # um from ref ; right is positive; based on manipulator coordinates/reconstructed track
-    ap_location=null: float # um from ref; anterior is positive; based on manipulator coordinates/reconstructed track
-    dv_location=null: float # um from dura; ventral is positive; based on manipulator coordinates/reconstructed track
+    -> lab.BrainArea
+    -> lab.Hemisphere
     """
+
+    class InjectionLocation(dj.Part):
+        definition = """
+        -> master
+        ---
+        -> lab.SkullReference
+        ap_location: decimal(6, 2) # (um) from ref; anterior is positive; based on manipulator coordinates/reconstructed track
+        ml_location: decimal(6, 2) # (um) from ref ; right is positive; based on manipulator coordinates/reconstructed track
+        dv_location: decimal(6, 2) # (um) from dura to first site of the probe; ventral is negative; based on manipulator coordinates/reconstructed track
+        theta=null:       decimal(5, 2) # (degree)  rotation about the ml-axis 
+        phi=null:         decimal(5, 2) # (degree)  rotation about the dv-axis
+        beta=null:        decimal(5, 2) # (degree)  rotation about the shank of the probe
+        """

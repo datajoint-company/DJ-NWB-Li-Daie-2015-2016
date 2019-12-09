@@ -18,7 +18,9 @@ experiment.Project.insert([('li2015', '', 'doi:10.1038/nature14178'),
 # Probe - NeuroNexus Silicon Probe
 probe = 'A4x8-5mm-100-200-177'
 lab.Probe.insert1({'probe': probe,
-                   'probe_type': 'nn_silicon_probe'}, skip_duplicates=True)
+                   'probe_type': 'nn_silicon_probe',
+                   'probe_comment': 'NeuroNexus silicon probes (part no. A4x8-5mm-100-200-177). The 32 channel voltage signals were multiplexed, recorded on a PCI6133 board at 312.5 kHz (National instrument), and digitized at 14 bit. The signals were demultiplexed into the 32 voltage traces, sampled at 19531.25 Hz and stored for offline analyses.'},
+                  skip_duplicates=True)
 lab.Probe.Electrode.insert(({'probe': probe, 'electrode': x} for x in range(1, 33)), skip_duplicates=True)
 
 electrode_group = {'probe': probe, 'electrode_group': 0}
@@ -34,55 +36,16 @@ lab.ElectrodeConfig.ElectrodeGroup.insert1({'electrode_config_name': electrode_c
 lab.ElectrodeConfig.Electrode.insert(({'electrode_config_name': electrode_config_name, **member}
                                      for member in electrode_group_member), skip_duplicates=True)
 
-# ==================== Brain Location =====================
-brain_locations = [{'brain_location_name': 'left_m2',
-                    'brain_area': 'M2',
-                    'hemisphere': 'left',
-                    'skull_reference': 'Bregma'},
-                   {'brain_location_name': 'right_m2',
-                    'brain_area': 'M2',
-                    'hemisphere': 'right',
-                    'skull_reference': 'Bregma'},
-                   {'brain_location_name': 'both_m2',
-                    'brain_area': 'M2',
-                    'hemisphere': 'both',
-                    'skull_reference': 'Bregma'},
-                   {'brain_location_name': 'left_alm',
-                    'brain_area': 'ALM',
-                    'hemisphere': 'left',
-                    'skull_reference': 'Bregma'},
-                   {'brain_location_name': 'right_alm',
-                    'brain_area': 'ALM',
-                    'hemisphere': 'right',
-                    'skull_reference': 'Bregma'},
-                   {'brain_location_name': 'both_alm',
-                    'brain_area': 'ALM',
-                    'hemisphere': 'both',
-                    'skull_reference': 'Bregma'},
-                   {'brain_location_name': 'left_pons',
-                    'brain_area': 'PONS',
-                    'hemisphere': 'left',
-                    'skull_reference': 'Bregma'},
-                   {'brain_location_name': 'right_pons',
-                    'brain_area': 'PONS',
-                    'hemisphere': 'right',
-                    'skull_reference': 'Bregma'},
-                   {'brain_location_name': 'both_pons',
-                    'brain_area': 'PONS',
-                    'hemisphere': 'both',
-                    'skull_reference': 'Bregma'}]
-experiment.BrainLocation.insert(brain_locations, skip_duplicates=True)
-
 # ==================== Photostim Trial Condition =====================
 
-stim_locs = ['left_alm', 'right_alm', 'both_alm']
+stim_locs = [('left', 'alm'), ('right', 'alm'), ('bilateral', 'alm')]
 stim_periods = [None, 'sample', 'early_delay', 'middle_delay']
 
 trial_conditions = []
-for loc in stim_locs:
+for hemi, brain_area in stim_locs:
     for instruction in (None, 'left', 'right'):
         for period, stim_dur in itertools.product(stim_periods, (0.5, 0.8)):
-            condition = {'trial_condition_name': '_'.join(filter(None, ['all', 'noearlylick', loc,
+            condition = {'trial_condition_name': '_'.join(filter(None, ['all', 'noearlylick', '_'.join([hemi, brain_area]),
                                                                         period, str(stim_dur), 'stim', instruction])),
                          'trial_condition_func': '_get_trials_include_stim',
                          'trial_condition_arg': {
@@ -90,7 +53,8 @@ for loc in stim_locs:
                                 'task': 'audio delay',
                                 'task_protocol': 1,
                                 'early_lick': 'no early',
-                                'brain_location_name': loc},
+                                'stim_laterality': hemi,
+                                'stim_brain_area': brain_area},
                              **({'trial_instruction': instruction} if instruction else {'_trial_instruction': 'non-performing'}),
                              **({'photostim_period': period, 'duration': stim_dur} if period else dict())}}
             trial_conditions.append(condition)

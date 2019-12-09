@@ -18,6 +18,7 @@ from . import smooth_psth
 [lab, experiment, ephys]  # NOQA
 
 from . import get_schema_name
+from .plot.util import _get_units_hemisphere
 
 schema = dj.schema(get_schema_name('psth'))
 log = logging.getLogger(__name__)
@@ -181,7 +182,8 @@ class TrialCondition(dj.Lookup):
             else:
                 restr[k] = v
 
-        stim_attrs = set((experiment.Photostim * experiment.PhotostimEvent).heading.names) - set(experiment.Session.heading.names)
+        stim_attrs = set((experiment.Photostim * experiment.PhotostimBrainRegion
+                          * experiment.PhotostimEvent).heading.names) - set(experiment.Session.heading.names)
         behav_attrs = set(experiment.BehaviorTrial.heading.names)
 
         _stim_key = {k: v for k, v in _restr.items() if k in stim_attrs}
@@ -191,7 +193,8 @@ class TrialCondition(dj.Lookup):
         behav_key = {k: v for k, v in restr.items() if k in behav_attrs}
 
         return (((experiment.BehaviorTrial & behav_key) - [{k: v} for k, v in _behav_key.items()]) -
-                ((experiment.PhotostimEvent * experiment.Photostim & stim_key) - [{k: v} for k, v in _stim_key.items()]).proj())
+                ((experiment.PhotostimEvent * experiment.PhotostimBrainRegion * experiment.Photostim & stim_key)
+                 - [{k: v} for k, v in _stim_key.items()]).proj())
 
     @classmethod
     def _get_trials_include_stim(cls, **kwargs):
@@ -205,7 +208,8 @@ class TrialCondition(dj.Lookup):
             else:
                 restr[k] = v
 
-        stim_attrs = set((experiment.Photostim * experiment.PhotostimEvent).heading.names) - set(experiment.Session.heading.names)
+        stim_attrs = set((experiment.Photostim * experiment.PhotostimBrainRegion
+                          * experiment.PhotostimEvent).heading.names) - set(experiment.Session.heading.names)
         behav_attrs = set(experiment.BehaviorTrial.heading.names)
 
         _stim_key = {k: v for k, v in _restr.items() if k in stim_attrs}
@@ -215,7 +219,8 @@ class TrialCondition(dj.Lookup):
         behav_key = {k: v for k, v in restr.items() if k in behav_attrs}
 
         return (((experiment.BehaviorTrial & behav_key) - [{k: v} for k, v in _behav_key.items()]) &
-                ((experiment.PhotostimEvent * experiment.Photostim & stim_key) - [{k: v} for k, v in _stim_key.items()]).proj())
+                ((experiment.PhotostimEvent * experiment.PhotostimBrainRegion * experiment.Photostim & stim_key)
+                 - [{k: v} for k, v in _stim_key.items()]).proj())
 
 
 @schema
@@ -327,7 +332,7 @@ class PeriodSelectivity(dj.Computed):
 
     alpha = 0.05  # default alpha value
 
-    key_source = experiment.EventPeriod * (ephys.Unit & 'unit_quality != "all"')
+    key_source = experiment.EventPeriod * (ephys.Unit & ephys.ProbeInsertion.InsertionLocation & 'unit_quality != "all"')
 
     def make(self, key):
         '''
@@ -335,15 +340,7 @@ class PeriodSelectivity(dj.Computed):
         '''
         log.debug('PeriodSelectivity.make(): key: {}'.format(key))
 
-        # Verify insertion location is present,
-        egpos = None
-        try:
-            egpos = (ephys.ProbeInsertion.InsertionLocation
-                     * experiment.BrainLocation & key).fetch1()
-        except dj.DataJointError as e:
-            if 'exactly one tuple' in repr(e):
-                log.error('... Insertion Location missing. skipping')
-                return
+        hemi = _get_units_hemisphere(key)
 
         # retrieving the spikes of interest,
         spikes_q = ((ephys.TrialSpikes & key)
@@ -374,7 +371,7 @@ class PeriodSelectivity(dj.Computed):
             start_time = start_event_q[trial] - cue_event_q[trial]
             stop_time = end_event_q[trial] - cue_event_q[trial]
             spk_rate = np.logical_and(spike_times >= start_time, spike_times < stop_time).sum() / (stop_time - start_time)
-            if egpos['hemisphere'] == trial_instruct:
+            if hemi == trial_instruct:
                 freq_i.append(spk_rate)
             else:
                 freq_c.append(spk_rate)
@@ -499,12 +496,9 @@ def compute_CD_projected_psth(units, time_period=None):
              ipsi-trials CD projected trial-psth
              psth time-stamps
     """
-    unit_hemi = (ephys.ProbeInsertion.InsertionLocation * experiment.BrainLocation
-                 & units).fetch('hemisphere')
-    if len(set(unit_hemi)) != 1:
-        raise Exception('Units from both hemispheres found')
-    else:
-        unit_hemi = unit_hemi[0]
+    from .plot.util import _get_units_hemisphere
+
+    unit_hemi = _get_units_hemisphere(units)
 
     session_key = experiment.Session & units
     if len(session_key) != 1:

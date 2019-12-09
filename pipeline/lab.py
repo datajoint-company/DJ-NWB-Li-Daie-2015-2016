@@ -70,7 +70,7 @@ class Subject(dj.Manual):
 
     class Strain(dj.Part):
         definition = """
-        # Subject gene modifications
+        # Subject strains
         -> master
         -> AnimalStrain
         """

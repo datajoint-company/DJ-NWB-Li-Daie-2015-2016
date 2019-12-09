@@ -9,17 +9,6 @@ schema = dj.schema(get_schema_name('experiment'))
 
 
 @schema
-class BrainLocation(dj.Manual):
-    definition = """
-    brain_location_name: varchar(32)  # unique name of this brain location (could be hash of the non-primary attr)
-    ---
-    -> lab.BrainArea
-    -> lab.Hemisphere
-    -> lab.SkullReference
-    """
-
-
-@schema
 class Session(dj.Manual):
     definition = """
     -> lab.Subject
@@ -76,15 +65,48 @@ class Photostim(dj.Manual):
     photo_stim :  smallint 
     ---
     -> lab.PhotostimDevice
-    -> BrainLocation
-    ml_location=null: float # um from ref ; right is positive; based on manipulator coordinates/reconstructed track
-    ap_location=null: float # um from ref; anterior is positive; based on manipulator coordinates/reconstructed track
-    dv_location=null: float # um from dura; ventral is positive; based on manipulator coordinates/reconstructed track
-    ml_angle=null: float # Angle between the manipulator/reconstructed track and the Medio-Lateral axis. A tilt towards the right hemishpere is positive.
-    ap_angle=null: float # Angle between the manipulator/reconstructed track and the Anterior-Posterior axis. An anterior tilt is positive.
     waveform=null:  longblob       # normalized to maximal power. The value of the maximal power is specified for each PhotostimTrialEvent individually
     frequency=null: float  # (Hz) 
     """
+
+    class PhotostimLocation(dj.Part):
+        definition = """
+        -> master
+        -> lab.SkullReference
+        ap_location: decimal(6, 2) # (um) from ref; anterior is positive; based on manipulator coordinates/reconstructed track
+        ml_location: decimal(6, 2) # (um) from ref ; right is positive; based on manipulator coordinates/reconstructed track
+        dv_location: decimal(6, 2) # (um) from dura to first site of the probe; ventral is negative; based on manipulator coordinates/reconstructed track
+        ---
+        theta=null:       decimal(5, 2) # (degree)  rotation about the ml-axis 
+        phi=null:         decimal(5, 2) # (degree)  rotation about the dv-axis
+        -> lab.BrainArea
+        """
+
+
+@schema
+class PhotostimBrainRegion(dj.Computed):
+    definition = """
+    -> Photostim
+    ---
+    -> lab.BrainArea.proj(stim_brain_area='brain_area')
+    stim_laterality: enum('left', 'right', 'bilateral')
+    """
+
+    def make(self, key):
+        brain_areas, ml_locations = (Photostim.PhotostimLocation & key).fetch('brain_area', 'ml_location')
+        if len(set(brain_areas)) > 1:
+            raise ValueError('Multiple different brain areas for one photostim protocol is unsupported')
+        if (ml_locations > 0).any() and (ml_locations < 0).any():
+            lat = 'bilateral'
+        elif (ml_locations > 0).all():
+            lat = 'right'
+        elif (ml_locations < 0).all():
+            lat = 'left'
+        else:
+            assert (ml_locations == 0).all()  # sanity check
+            raise ValueError('Ambiguous hemisphere: ML locations are all 0...')
+
+        self.insert1(dict(key, stim_brain_area=brain_areas[0], stim_laterality=lat))
 
 
 @schema

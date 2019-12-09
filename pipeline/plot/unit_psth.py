@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from pipeline.psth import TrialCondition
 from pipeline.psth import UnitPsth
 from pipeline import ephys, experiment
-from pipeline.plot import _get_photostim_time_and_duration, _get_trial_event_times
+from pipeline.plot.util import _get_photostim_time_and_duration, _get_trial_event_times, _get_units_hemisphere
 
 
 _plt_xlim = [-3, 2]
@@ -30,7 +30,7 @@ def _plot_spike_raster(ipsi, contra, vlines=[], shade_bar=None, ax=None, title='
     for x in vlines:
         ax.axvline(x=x, linestyle='--', color='k')
     if shade_bar is not None:
-        ax.axvspan(shade_bar[0], shade_bar[0] + shade_bar[1], alpha = 0.3, color = 'royalblue')
+        ax.axvspan(shade_bar[0], shade_bar[0] + shade_bar[1], alpha=0.3, color='royalblue')
 
     ax.set_axis_off()
     ax.set_xlim(xlim)
@@ -64,8 +64,7 @@ def plot_unit_psth(unit_key, condition_name_kw=['good_noearlylick_', '_hit'], ax
     condition_name_kw: list of keywords to match for the TrialCondition name
     """
 
-    hemi = (ephys.ProbeInsertion.InsertionLocation
-            * experiment.BrainLocation & unit_key).fetch1('hemisphere')
+    hemi = _get_units_hemisphere(unit_key)
 
     ipsi_cond_name = TrialCondition.get_cond_name_from_keywords(condition_name_kw
                                                                 + ['left' if hemi == 'left' else 'right'])[0]

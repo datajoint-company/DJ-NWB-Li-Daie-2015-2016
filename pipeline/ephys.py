@@ -23,12 +23,27 @@ class ProbeInsertion(dj.Manual):
         definition = """
         -> master
         ---
-        -> experiment.BrainLocation
-        ml_location=null: float # um from ref ; right is positive; based on manipulator coordinates/reconstructed track
-        ap_location=null: float # um from ref; anterior is positive; based on manipulator coordinates/reconstructed track
-        dv_location=null: float # um from dura; ventral is positive; based on manipulator coordinates/reconstructed track
-        ml_angle=null: float # Angle between the manipulator/reconstructed track and the Medio-Lateral axis. A tilt towards the right hemishpere is positive.
-        ap_angle=null: float # Angle between the manipulator/reconstructed track and the Anterior-Posterior axis. An anterior tilt is positive. 
+        -> lab.SkullReference
+        ap_location: decimal(6, 2) # (um) from ref; anterior is positive; based on manipulator coordinates/reconstructed track
+        ml_location: decimal(6, 2) # (um) from ref ; right is positive; based on manipulator coordinates/reconstructed track
+        dv_location: decimal(6, 2) # (um) from dura to first site of the probe; ventral is negative; based on manipulator coordinates/reconstructed track
+        theta=null:  decimal(5, 2) # (deg) - elevation - rotation about the ml-axis [0, 180] - w.r.t the z+ axis
+        phi=null:    decimal(5, 2) # (deg) - azimuth - rotation about the dv-axis [0, 360] - w.r.t the x+ axis
+        beta=null:   decimal(5, 2) # (deg) rotation about the shank of the probe
+        """
+
+    class RecordableBrainRegion(dj.Part):
+        definition = """
+        -> master
+        -> lab.BrainArea
+        -> lab.Hemisphere
+        """
+
+    class InsertionNote(dj.Part):
+        definition = """
+        -> master
+        ---
+        insertion_note: varchar(1000)
         """
 
     class ElectrodeSitePosition(dj.Part):

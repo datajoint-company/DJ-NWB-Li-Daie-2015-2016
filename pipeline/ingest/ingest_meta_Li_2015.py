@@ -42,7 +42,7 @@ def main(meta_data_dir='./data/meta_data', reingest=True):
     meta_data_files = meta_data_dir.glob('*.mat')
     for meta_data_file in tqdm(meta_data_files):
         print(f'-- Read {meta_data_file} --')
-        meta_data = sio.loadmat(meta_data_file, struct_as_record = False, squeeze_me=True)['meta_data']
+        meta_data = sio.loadmat(meta_data_file, struct_as_record=False, squeeze_me=True)['meta_data']
 
         # ==================== person ====================
         person_key = dict(username=meta_data.experimenters,
@@ -97,21 +97,22 @@ def main(meta_data_dir='./data/meta_data', reingest=True):
         print(f'\tInsert Session - {session_key["subject_id"]} - {session_key["session_date"]}')
 
         # ==================== Probe Insertion ====================
-        brain_location_key = (experiment.BrainLocation & dict(brain_area=meta_data.extracellular.recordingLocation,
-                                                              hemisphere=hemi,
-                                                              skull_reference=skull_reference)).fetch1('KEY')
-        insertion_loc_key = dict(brain_location_key,
-                                 ml_location=meta_data.extracellular.recordingCoordinates[0] * 1000,  # mm to um
-                                 ap_location=meta_data.extracellular.recordingCoordinates[1] * 1000,  # mm to um
-                                 dv_location=meta_data.extracellular.recordingCoordinates[2])         # already in um
+        brain_location_key = dict(brain_area=meta_data.extracellular.recordingLocation,
+                                  hemisphere=hemi)
+        insertion_loc_key = dict(skull_reference=skull_reference,
+                                 ap_location=meta_data.extracellular.recordingCoordinates[0] * 1000,  # mm to um
+                                 ml_location=meta_data.extracellular.recordingCoordinates[1] * 1000,  # mm to um
+                                 dv_location=meta_data.extracellular.recordingCoordinates[2] * -1)    # already in um
 
         with ephys.ProbeInsertion.connection.transaction:
             ephys.ProbeInsertion.insert1(dict(session_key, insertion_number=1, probe=probe,
                                               electrode_config_name=electrode_config_name), ignore_extra_fields=True)
             ephys.ProbeInsertion.InsertionLocation.insert1(dict(session_key, **insertion_loc_key,
-                                                                insertion_number=1, probe=probe,
-                                                                electrode_config_name=electrode_config_name),
+                                                                insertion_number=1),
                                                            ignore_extra_fields=True)
+            ephys.ProbeInsertion.RecordableBrainRegion.insert1(dict(session_key, **brain_location_key,
+                                                                    insertion_number=1),
+                                                               ignore_extra_fields=True)
             ephys.ProbeInsertion.ElectrodeSitePosition.insert((dict(
                 session_key, insertion_number=1, probe=probe, electrode_config_name=electrode_config_name,
                 electrode_group=0, electrode= site_idx + 1,
@@ -119,7 +120,7 @@ def main(meta_data_dir='./data/meta_data', reingest=True):
                 for site_idx, (x, y, z) in enumerate(meta_data.extracellular.siteLocations)),
                 ignore_extra_fields=True)
 
-        print(f'\tInsert ProbeInsertion - Location: {brain_location_key["brain_location_name"]}')
+        print(f'\tInsert ProbeInsertion - Location: {brain_location_key}')
 
         # ==================== Virus ====================
         if 'virus' in meta_data._fieldnames and isinstance(meta_data.virus, sio.matlab.mio5_params.mat_struct):
@@ -131,18 +132,17 @@ def main(meta_data_dir='./data/meta_data', reingest=True):
             virus.Virus.insert1(virus_info, skip_duplicates=True)
 
             # -- BrainLocation
-            brain_location_key = (experiment.BrainLocation & {'brain_area': meta_data.virus.infectionLocation,
-                                                              'hemisphere': hemi,
-                                                              'skull_reference': skull_reference}).fetch1('KEY')
+            brain_location_key = dict(brain_area=meta_data.virus.infectionLocation,
+                                      hemisphere=hemi)
             virus_injection = dict(
                 {**virus_info, **subject_key, **brain_location_key},
                 injection_date=parse_date(meta_data.virus.injectionDate))
 
             virus.VirusInjection.insert([dict(virus_injection,
                                               injection_id=inj_idx + 1,
-                                              ml_location=coord[0] * 1000,
-                                              ap_location=coord[1] * 1000,
-                                              dv_location=coord[2] * 1000,
+                                              ap_location=coord[0] * 1000,
+                                              ml_location=coord[1] * 1000,
+                                              dv_location=coord[2] * 1000 * -1,
                                               injection_volume=vol)
                                          for inj_idx, (coord, vol) in enumerate(zip(meta_data.virus.infectionCoordinates,
                                                                                     meta_data.virus.injectionVolume))],
@@ -160,24 +160,25 @@ def main(meta_data_dir='./data/meta_data', reingest=True):
             photostim_locs = []
             for ba in set(photostimLocation):
                 coords = photostimCoordinates[photostimLocation == ba]
-                if len(coords) < 2:
-                    photostim_locs.append((ba, 'left' if coords[0][1] < 0 else 'right', coords[0]))
-                else:
-                    photostim_locs.append((ba, 'both', np.array([coords[0][0], abs(coords[0][1]), coords[0][2]])))
+                photostim_locs.append((ba, coords))
 
-            for stim_idx, (loc, hem, coord) in enumerate(photostim_locs):
-                brain_location_key = (experiment.BrainLocation & dict(brain_area=loc,
-                                                                      hemisphere=hem,
-                                                                      skull_reference=skull_reference)).fetch1('KEY')
+            for stim_idx, (loc, coords) in enumerate(photostim_locs):
+
                 experiment.Photostim.insert1(dict(
-                    session_key, **brain_location_key,
-                    photo_stim=stim_idx + 1,
-                    photostim_device=photostim_devices[meta_data.photostim.photostimWavelength],
-                    ml_location=coord[0] * 1000,
-                    ap_location=coord[1] * 1000,
-                    dv_location=coord[2] * 1000), ignore_extra_fields=True)
+                    session_key, photo_stim=stim_idx + 1,
+                    photostim_device=photostim_devices[meta_data.photostim.photostimWavelength]),
+                    ignore_extra_fields=True)
 
-            print(f'\tInsert Photostim - Count: {len(meta_data.photostim.photostimLocation)}')
+                experiment.Photostim.PhotostimLocation.insert([
+                    dict(session_key,  photo_stim=stim_idx + 1,
+                         brain_area=loc, skull_reference=skull_reference,
+                         ap_location=coord[0] * 1000,
+                         ml_location=coord[1] * 1000,
+                         dv_location=coord[2] * 1000 * -1) for coord in coords], ignore_extra_fields=True)
+
+            print(f'\tInsert Photostim - Count: {len(photostim_locs)}')
+
+    experiment.PhotostimBrainRegion.populate(display_progress=True)
 
 
 if __name__ == '__main__':
